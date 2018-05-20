@@ -1,0 +1,80 @@
+#!/usr/bin/python
+#Script to parse and change volume of speakers
+
+#Import Libraries
+import subprocess
+import sys
+
+#Set global variables
+mytty = False
+
+#Define Functions
+
+def error_check():
+    root_check = subprocess.check_output('echo $EUID', universal_newlines=True, shell=True).replace('\n', '')
+    if root_check == '0':
+        print('Program cannot be run as root')
+        usage()
+        exit()
+
+def parse_args():                                                                           #Get and separate tty, sink, and volume arguments
+    if sys.argv[1] == '-e':                                                                 #If edit argument passed
+        subprocess.call('sudo vim /usr/local/bin/vset', shell=True)                         #Edit File
+        exit()                                                                              #Leave
+    arguments = {}                                                                          #Define argument dictionary
+    if int(sys.argv[len(sys.argv) - 1 ]) > 150 or int(sys.argv[len(sys.argv) - 1 ]) < 0:    #If last argument not an integer between 0 and 150 inclusive,
+        usage()                                                                             #Print Usage
+        exit()                                                                              #Leave
+    for argpart in sys.argv:                                                                #Separate arguments
+        if argpart.startswith('-'):                                                         #If is a key argument
+            if argpart == '-mytty':                                                         #If 'mytty' option passed
+                global mytty                                                                #Call global variable mytty
+                mytty = True                                                                #Set it to true
+            else:                                                                           #For any other argument
+                (arg,val) = argpart.split('=')                                              #Split key and value by '=' sign
+                arg = arg[1:]                                                               #Remove '-' from key
+                if arg in arguments:                                                        #If key exists,
+                    arguments[arg].append(val)                                              #Append value to pre-existing key
+                else:                                                                       #If key doesn't exist,
+                    arguments[arg] =  val                                                   #Create key and add value
+        elif argpart.isdigit() and int(argpart) >= 0 and int(argpart) <= 150:               #If argument is not a key value, but is an integer between 0 and 150 inclusive,
+            volume = int(argpart)                                                           #Set volume variable
+    return [arguments, volume]                                                              #Return arguments and volume list
+
+def set_volume(volume, sink, tty):                                                                              #Set volume via command-line           
+    if not mytty:                                                                                               #If mytty option not set,
+        subprocess.call(f'sh -c "pactl set-sink-volume {sink} {volume}%" | sudo tee /dev/{tty}', shell=True)    #Set volume on specified sink and specified tty
+    elif mytty:                                                                                                 #If mytty option is set,
+        subprocess.call(f'pactl set-sink-volume {sink} {volume}%', shell=True)                                  #Set volume on specified sink and on current tty
+    exit()                                                                                                      #End program
+
+def arg_opts():                             #Separate arguments parse and get default values incorporated
+    args = parse_args()[0]                  #Get argument dictionary from parse_args() function
+    passed = []                             #Passed arguments list
+    if 'sink' in args:                      #If sink key defined in argument dictionary
+        passed.append(args['sink'])         #Add sink value to list
+    else:                                   #If sink key undefined in argument dictionary
+        passed.append(0)                    #Add default sink value to list
+    if 'tty' in args:                       #If tty key defined in argument dictionary
+        passed.append(args['tty'])          #Add tty value to list
+    else:                                   #If tty key undefined in argument dictionary
+        passed.append('tty1')               #Add default tty value to list
+    return passed                           #Return completed list
+
+def usage():                                                                                        #Function to print command usage
+    print("Volume Set: A cli tool to set pulse-audio volume across tty's")                          #Function to print command usage
+    print('VSET: vset -[option]=[value] (volume)')                                                  #Function to print command usage
+    print('Options:')                                                                               #Function to print command usage
+    print('-sink=(sink value) -- set speaker sink to use. default is zero')                         #Function to print command usage
+    print('-tty=(tty)         -- set tty to change speaker volume of. default is tty1')             #Function to print command usage
+    print('                      Valid entries are: tty1, tty2, tty3, tty4, tty5, tty6, tty7')      #Function to print command usage
+    print('VSET REQUIRES AT LEAST THE VOLUME ARGUMENT')                                             #Function to print command usage
+    print("PASSING COMMANDS ACROSS TTY'S REQUIRES ROOT PRIVELEGES")                                 #Function to print command usage
+    print("DO NOT RUN PROGRAM AS ROOT AS SOME COMMANDS CANT BE RUN AS ROOT")                        #Function to print command usage
+    print("SUDO WILL BE CALLED WHEN ROOT  PRIVELEGES ARE NECESSARY")                                #Function to print command usage
+
+error_check()                               #Check for root privilege
+sink, tty = arg_opts()                      #Set global sink and tty variables
+volume = parse_args()[1]                    #Set global volume variable
+set_volume(volume, sink, tty)               #Call set_volume() function with declared variables
+print("Program Executed Successfully")      #End Message
